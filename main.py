@@ -174,7 +174,7 @@ class BatchCopyApp:
         header.grid(row=0, column=0, sticky="ew", pady=(0,12))
         tk.Label(header, text="📂 批量路径复制工具", font=("Segoe UI", 20, "bold"),
                  fg="#1E293B", bg="#F0F4F8").pack(side=tk.LEFT)
-        tk.Label(header, text="v7.3", font=("Segoe UI", 12),
+        tk.Label(header, text="v7.3-fix", font=("Segoe UI", 12),
                  fg="#6B7280", bg="#F0F4F8").pack(side=tk.LEFT, padx=(12,0))
         
         # ---- 路径列表框 ----
@@ -195,6 +195,7 @@ class BatchCopyApp:
         tk.Label(left_header, text="📁 源路径列表", font=("Segoe UI", 11, "bold"),
                  fg="#1E293B", bg="#F0F4F8").pack(side=tk.LEFT)
         ttk.Button(left_header, text="📂 浏览目录", command=self.browse_source_dir).pack(side=tk.RIGHT)
+        # 左侧占位
         self.left_placeholder = tk.Frame(left_card, height=60, bg="white")
         self.left_placeholder.grid(row=1, column=0, sticky="ew", pady=(0,0), padx=6)
         self.left_placeholder.grid_propagate(False)
@@ -345,11 +346,17 @@ class BatchCopyApp:
         self.error_label.grid(row=0, column=4, padx=(4,4))
         ttk.Button(log_btn, text="📋 导出错误", command=self.export_error_log).grid(row=0, column=5, padx=2)
         
+        # 绑定窗口事件，同步占位高度
+        self.root.bind("<Configure>", self.on_window_resize)
+        
         self.log("✅ 程序启动，就绪")
         self.on_mode_change()
-        self.root.after(50, self.sync_placeholder_height)
+        self.root.after(100, self.sync_placeholder_height)
     
     # ------------------ 像素级对齐：同步左侧占位高度 ------------------
+    def on_window_resize(self, event):
+        self.root.after_idle(self.sync_placeholder_height)
+    
     def sync_placeholder_height(self):
         h1 = self.row1.winfo_height() if self.row1.winfo_ismapped() else 0
         h2 = self.row2.winfo_height() if self.row2.winfo_ismapped() else 0
@@ -358,7 +365,7 @@ class BatchCopyApp:
             self.left_placeholder.config(height=total)
             self.left_placeholder.grid_propagate(False)
     
-    # ------------------ 模式切换（修复间距） ------------------
+    # ------------------ 模式切换（修复 columnspan 问题） ------------------
     def on_mode_change(self):
         mode = self.mode_var.get()
         self.dst_text.delete(1.0, tk.END)
@@ -366,10 +373,10 @@ class BatchCopyApp:
         if mode == "root":
             self.root_target_entry.config(state='normal')
             self.browse_root_btn.config(state='normal')
-            # 显示所有控件，恢复正常间距
             self.row2_label.grid()
             self.prefix_entry.grid()
-            self.generate_btn.grid(row=0, column=2, padx=(4,4))
+            # 修复：重置 columnspan=1，确保按钮只占一列
+            self.generate_btn.grid(row=0, column=2, padx=(4,4), columnspan=1)
             self.prefix_hint.grid()
             self.prefix_entry.config(state='normal')
             self.generate_btn.config(state='normal')
@@ -388,7 +395,8 @@ class BatchCopyApp:
             self.browse_root_btn.config(state='disabled')
             self.row2_label.grid()
             self.prefix_entry.grid()
-            self.generate_btn.grid(row=0, column=2, padx=(4,4))
+            # 修复：重置 columnspan=1
+            self.generate_btn.grid(row=0, column=2, padx=(4,4), columnspan=1)
             self.prefix_hint.grid()
             self.prefix_entry.config(state='disabled')
             self.generate_btn.config(state='disabled')
@@ -400,11 +408,10 @@ class BatchCopyApp:
         else:  # multi
             self.root_target_entry.config(state='normal')
             self.browse_root_btn.config(state='normal')
-            # 隐藏公共父目录相关，只留生成路径按钮，并设置合适的边距
             self.row2_label.grid_remove()
             self.prefix_entry.grid_remove()
             self.prefix_hint.grid_remove()
-            # 生成路径按钮占满整行，左右留出边距避免粘连
+            # 多对一模式：按钮跨4列
             self.generate_btn.grid(row=0, column=0, columnspan=4, sticky="ew", padx=(4,4))
             self.generate_btn.config(state='normal')
             self.dst_text.placeholder = (
@@ -418,7 +425,7 @@ class BatchCopyApp:
         self.tree.delete(*self.tree.get_children())
         self.mapping.clear()
         self.clear_counts()
-        self.root.after(50, self.sync_placeholder_height)
+        self.root.after(100, self.sync_placeholder_height)
     
     # ------------------ 计数管理 ------------------
     def clear_counts(self):
