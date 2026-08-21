@@ -5,6 +5,28 @@ import shutil
 import os
 from datetime import datetime
 
+# -------------------- 路径清洗工具（增强版） --------------------
+def clean_path(text):
+    """
+    清洗路径字符串：
+    - 去除首尾空格
+    - 去除首尾单/双引号
+    - 将正斜杠 / 统一替换为反斜杠 \
+    - 如果字符串包含引号（如 "path"），去除所有引号（防止中间引号干扰）
+    """
+    if not text:
+        return text
+    cleaned = text.strip()
+    # 去除首尾引号（多次去除，直到没有引号）
+    while (cleaned.startswith('"') and cleaned.endswith('"')) or \
+          (cleaned.startswith("'") and cleaned.endswith("'")):
+        cleaned = cleaned[1:-1].strip()
+    # 替换正斜杠为反斜杠
+    cleaned = cleaned.replace('/', '\\')
+    # 去除可能残留的中间引号（但不常见）
+    cleaned = cleaned.replace('"', '').replace("'", "")
+    return cleaned
+
 # -------------------- 自定义滚动文本框（带占位符） --------------------
 class CustomScrolledText(tk.Frame):
     def __init__(self, master, placeholder="", **kwargs):
@@ -174,7 +196,7 @@ class BatchCopyApp:
         header.grid(row=0, column=0, sticky="ew", pady=(0,12))
         tk.Label(header, text="📂 批量路径复制工具", font=("Segoe UI", 20, "bold"),
                  fg="#1E293B", bg="#F0F4F8").pack(side=tk.LEFT)
-        tk.Label(header, text="v7.3-fix", font=("Segoe UI", 12),
+        tk.Label(header, text="v7.6", font=("Segoe UI", 12),
                  fg="#6B7280", bg="#F0F4F8").pack(side=tk.LEFT, padx=(12,0))
         
         # ---- 路径列表框 ----
@@ -241,6 +263,7 @@ class BatchCopyApp:
                  bg="white").grid(row=0, column=0, sticky="w", padx=(0,4))
         self.root_target_entry = ttk.Entry(self.row1, font=("Consolas", 10))
         self.root_target_entry.grid(row=0, column=1, sticky="ew", padx=(4,4))
+        self.root_target_entry.bind("<FocusOut>", self.clean_entry)
         self.browse_root_btn = ttk.Button(self.row1, text="浏览", command=self.browse_root_target)
         self.browse_root_btn.grid(row=0, column=2, padx=(4,0))
         
@@ -252,6 +275,7 @@ class BatchCopyApp:
         self.row2_label.grid(row=0, column=0, sticky="w", padx=(0,4))
         self.prefix_entry = ttk.Entry(self.row2, font=("Consolas", 10))
         self.prefix_entry.grid(row=0, column=1, sticky="ew", padx=(4,4))
+        self.prefix_entry.bind("<FocusOut>", self.clean_entry)
         self.generate_btn = ttk.Button(self.row2, text="生成路径", command=self.generate_target_paths)
         self.generate_btn.grid(row=0, column=2, padx=(4,4))
         self.prefix_hint = tk.Label(self.row2, text="留空自动检测", font=("Segoe UI", 8),
@@ -346,14 +370,21 @@ class BatchCopyApp:
         self.error_label.grid(row=0, column=4, padx=(4,4))
         ttk.Button(log_btn, text="📋 导出错误", command=self.export_error_log).grid(row=0, column=5, padx=2)
         
-        # 绑定窗口事件，同步占位高度
         self.root.bind("<Configure>", self.on_window_resize)
-        
         self.log("✅ 程序启动，就绪")
         self.on_mode_change()
         self.root.after(100, self.sync_placeholder_height)
     
-    # ------------------ 像素级对齐：同步左侧占位高度 ------------------
+    # ------------------ 输入框自动清洗 ------------------
+    def clean_entry(self, event):
+        widget = event.widget
+        current = widget.get()
+        cleaned = clean_path(current)
+        if cleaned != current:
+            widget.delete(0, tk.END)
+            widget.insert(0, cleaned)
+    
+    # ------------------ 像素对齐 ------------------
     def on_window_resize(self, event):
         self.root.after_idle(self.sync_placeholder_height)
     
@@ -365,7 +396,7 @@ class BatchCopyApp:
             self.left_placeholder.config(height=total)
             self.left_placeholder.grid_propagate(False)
     
-    # ------------------ 模式切换（修复 columnspan 问题） ------------------
+    # ------------------ 模式切换（修复 columnspan） ------------------
     def on_mode_change(self):
         mode = self.mode_var.get()
         self.dst_text.delete(1.0, tk.END)
@@ -375,7 +406,6 @@ class BatchCopyApp:
             self.browse_root_btn.config(state='normal')
             self.row2_label.grid()
             self.prefix_entry.grid()
-            # 修复：重置 columnspan=1，确保按钮只占一列
             self.generate_btn.grid(row=0, column=2, padx=(4,4), columnspan=1)
             self.prefix_hint.grid()
             self.prefix_entry.config(state='normal')
@@ -395,7 +425,6 @@ class BatchCopyApp:
             self.browse_root_btn.config(state='disabled')
             self.row2_label.grid()
             self.prefix_entry.grid()
-            # 修复：重置 columnspan=1
             self.generate_btn.grid(row=0, column=2, padx=(4,4), columnspan=1)
             self.prefix_hint.grid()
             self.prefix_entry.config(state='disabled')
@@ -411,7 +440,6 @@ class BatchCopyApp:
             self.row2_label.grid_remove()
             self.prefix_entry.grid_remove()
             self.prefix_hint.grid_remove()
-            # 多对一模式：按钮跨4列
             self.generate_btn.grid(row=0, column=0, columnspan=4, sticky="ew", padx=(4,4))
             self.generate_btn.config(state='normal')
             self.dst_text.placeholder = (
@@ -522,7 +550,7 @@ class BatchCopyApp:
             self.log(f"📋 错误列表已导出至 {file_path}")
             messagebox.showinfo("完成", f"已导出 {self.error_count} 条错误记录。")
     
-    # ------------------ 其他功能方法 ------------------
+    # ------------------ 其他功能方法（增强清洗） ------------------
     def browse_source_dir(self):
         folder = filedialog.askdirectory(title="选择源目录（将获取所有最底层子文件夹）")
         if not folder:
@@ -543,8 +571,9 @@ class BatchCopyApp:
         if file_path:
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
+            lines = [clean_path(line) for line in content.splitlines() if clean_path(line)]
             self.src_text.delete(1.0, tk.END)
-            self.src_text.insert(tk.END, content)
+            self.src_text.insert(tk.END, "\n".join(lines))
             self.log(f"📂 已导入源列表: {file_path}")
     
     def load_dst_file(self):
@@ -552,13 +581,15 @@ class BatchCopyApp:
         if file_path:
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
+            lines = [clean_path(line) for line in content.splitlines() if clean_path(line)]
             self.dst_text.delete(1.0, tk.END)
-            self.dst_text.insert(tk.END, content)
+            self.dst_text.insert(tk.END, "\n".join(lines))
             self.log(f"📂 已导入目标列表: {file_path}")
     
     def browse_root_target(self):
         folder = filedialog.askdirectory(title="选择目标根目录")
         if folder:
+            folder = clean_path(folder)
             self.root_target_entry.delete(0, tk.END)
             self.root_target_entry.insert(0, folder)
             self.log(f"设置目标根目录: {folder}")
@@ -569,12 +600,13 @@ class BatchCopyApp:
             messagebox.showinfo("提示", "一对一映射模式不支持自动生成，请手动输入或导入目标路径。")
             return
         
-        src_lines = self.src_text.get(1.0, tk.END).strip().splitlines()
-        src_lines = [line.strip() for line in src_lines if line.strip()]
+        # 清洗源路径
+        src_text = self.src_text.get(1.0, tk.END).strip()
+        src_lines = [clean_path(line) for line in src_text.splitlines() if clean_path(line)]
         if not src_lines:
             messagebox.showwarning("警告", "源路径列表为空！")
             return
-        root_target = self.root_target_entry.get().strip()
+        root_target = clean_path(self.root_target_entry.get().strip())
         if not root_target:
             messagebox.showwarning("警告", "请先输入或选择目标根目录！")
             return
@@ -586,7 +618,7 @@ class BatchCopyApp:
         
         dst_paths = []
         if mode == "root":
-            prefix = self.prefix_entry.get().strip()
+            prefix = clean_path(self.prefix_entry.get().strip())
             if prefix:
                 if not prefix.endswith(os.sep):
                     prefix += os.sep
@@ -600,21 +632,23 @@ class BatchCopyApp:
                     prefix += os.sep
                 self.log(f"自动检测的公共前缀: {prefix}")
             
+            # 检查每个源路径是否以前缀开头
             for src in src_lines:
                 if not src.startswith(prefix):
+                    # 错误信息显示实际使用的前缀
                     messagebox.showerror("错误", f"源路径 \"{src}\" 不以剥离前缀 \"{prefix}\" 开头，请检查！")
                     return
                 rel_path = src[len(prefix):]
                 dst = os.path.join(root_target, rel_path)
-                dst_paths.append(dst)
+                dst_paths.append(clean_path(dst))
         else:  # multi
             for src in src_lines:
                 base = os.path.basename(src)
                 dst = os.path.join(root_target, base)
-                dst_paths.append(dst)
+                dst_paths.append(clean_path(dst))
             self.log(f"多对一模式：所有源复制到 {root_target} 下，保留各自的末级目录名")
         
-        dst_paths = [p.replace('/', '\\') for p in dst_paths]
+        # 填充目标文本框
         self.dst_text.delete(1.0, tk.END)
         self.dst_text.insert(tk.END, "\n".join(dst_paths))
         self.dst_text.placeholder = ""
@@ -626,7 +660,7 @@ class BatchCopyApp:
 
 1. 左侧输入源路径列表（每行一个完整路径）。
    - 可使用「浏览目录」自动获取所有最底层子文件夹。
-   - 也可「导入 txt」加载列表。
+   - 也可「导入 txt」加载列表（自动清洗引号和空格，统一斜杠）。
 
 2. 选择目标模式：
    • 统一目标目录：保留完整子目录层级（剥离公共父目录后拼接）
@@ -647,24 +681,24 @@ class BatchCopyApp:
         messagebox.showinfo("帮助", help_text)
     
     def preview_mapping(self):
-        src_lines = self.src_text.get(1.0, tk.END).strip().splitlines()
-        src_lines = [line.strip() for line in src_lines if line.strip()]
+        src_text = self.src_text.get(1.0, tk.END).strip()
+        src_lines = [clean_path(line) for line in src_text.splitlines() if clean_path(line)]
         if not src_lines:
             messagebox.showwarning("警告", "源路径列表为空！")
             return
         
         mode = self.mode_var.get()
         if mode == "multi":
-            dst_text_content = self.dst_text.get(1.0, tk.END).strip()
-            dst_lines = [line.strip() for line in dst_text_content.splitlines() if line.strip()]
+            dst_text = self.dst_text.get(1.0, tk.END).strip()
+            dst_lines = [clean_path(line) for line in dst_text.splitlines() if clean_path(line)]
             if len(dst_lines) != len(src_lines):
                 self.log("多对一模式：自动生成目标路径...")
                 self.generate_target_paths()
-                dst_text_content = self.dst_text.get(1.0, tk.END).strip()
-                dst_lines = [line.strip() for line in dst_text_content.splitlines() if line.strip()]
+                dst_text = self.dst_text.get(1.0, tk.END).strip()
+                dst_lines = [clean_path(line) for line in dst_text.splitlines() if clean_path(line)]
         
-        dst_text_content = self.dst_text.get(1.0, tk.END).strip()
-        dst_lines = [line.strip() for line in dst_text_content.splitlines() if line.strip()]
+        dst_text = self.dst_text.get(1.0, tk.END).strip()
+        dst_lines = [clean_path(line) for line in dst_text.splitlines() if clean_path(line)]
         if not dst_lines:
             messagebox.showwarning("警告", "目标路径列表为空！请先生成路径或手动输入。")
             return
